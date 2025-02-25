@@ -1,27 +1,46 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+import sys
+import os
+import subprocess
 
-get_ipython().system(' pip3 install --no-cache-dir --upgrade "kfp>2"                                          google-cloud-aiplatform')
+try:
+    get_ipython()
+    IS_IPYTHON = True
+except NameError:
+    IS_IPYTHON = False
+
+if IS_IPYTHON:
+    get_ipython().system(' pip3 install --no-cache-dir --upgrade "kfp>2" google-cloud-aiplatform')
+else:
+    subprocess.check_call(['pip3', 'install', '--no-cache-dir', '--upgrade', 'kfp>2', 'google-cloud-aiplatform'])
 
 
 # Check the KFP SDK version.
 
 # In[3]:
 
-
-get_ipython().system(' python3 -c "import kfp; print(\'KFP SDK version: {}\'.format(kfp.__version__))"')
-get_ipython().system(' pip3 freeze | grep aiplatform')
-
-
-
-
-import sys
-
+if IS_IPYTHON:
+    get_ipython().system(' python3 -c "import kfp; print(\'KFP SDK version: {}\'.format(kfp.__version__))"')
+    get_ipython().system(' pip3 freeze | grep aiplatform')
+else:
+    import kfp
+    print(f"KFP SDK version: {kfp.__version__}")
+    subprocess.check_call(['pip3', 'freeze', '|', 'grep', 'aiplatform'])
 
 
-PROJECT_ID = get_ipython().getoutput('(gcloud config get-value core/project)')
-PROJECT_ID = PROJECT_ID[0]
+
+
+PROJECT_ID = None
+if IS_IPYTHON:
+    PROJECT_ID = get_ipython().getoutput('(gcloud config get-value core/project)')
+    PROJECT_ID = PROJECT_ID[0]
+else:
+    result = subprocess.run(['gcloud', 'config', 'get-value', 'core/project'], capture_output=True, text=True)
+    PROJECT_ID = result.stdout.strip()
+
+print(f"PROJECT_ID: {PROJECT_ID}")
 
 LOCATION = "us-central1"
 LOCATION = "us-central1"
@@ -41,8 +60,10 @@ BUCKET_URI = f"gs://{PROJECT_ID}-unique"  # @param {type:"string"}
 # **Only if your bucket doesn't already exist**: Run the following cell to create your Cloud Storage bucket.
 
 
-
-get_ipython().system(' gsutil mb -l $LOCATION -p $PROJECT_ID $BUCKET_URI')
+if IS_IPYTHON:
+    get_ipython().system(' gsutil mb -l $LOCATION -p $PROJECT_ID $BUCKET_URI')
+else:
+    subprocess.check_call(['gsutil', 'mb', '-l', LOCATION, '-p', PROJECT_ID, BUCKET_URI])
 
 
 # #### Service Account 
@@ -65,13 +86,24 @@ if (
 ):
     # Get your service account from gcloud
     if not IS_COLAB:
-        shell_output = get_ipython().getoutput('gcloud auth list 2>/dev/null')
-        SERVICE_ACCOUNT = shell_output[2].replace("*", "").strip()
+        if IS_IPYTHON:
+            shell_output = get_ipython().getoutput('gcloud auth list 2>/dev/null')
+            SERVICE_ACCOUNT = shell_output[2].replace("*", "").strip()
+        else:
+            result = subprocess.run(['gcloud', 'auth', 'list'], capture_output=True, text=True, stderr=subprocess.DEVNULL)
+            SERVICE_ACCOUNT = result.stdout.splitlines()[2].replace("*", "").strip()
+
 
     else:  # IS_COLAB:
-        shell_output = get_ipython().getoutput(' gcloud projects describe  $PROJECT_ID')
-        project_number = shell_output[-1].split(":")[1].strip().replace("'", "")
-        SERVICE_ACCOUNT = f"{project_number}-compute@developer.gserviceaccount.com"
+        if IS_IPYTHON:
+            shell_output = get_ipython().getoutput(' gcloud projects describe  $PROJECT_ID')
+            project_number = shell_output[-1].split(":")[1].strip().replace("'", "")
+            SERVICE_ACCOUNT = f"{project_number}-compute@developer.gserviceaccount.com"
+        else:
+             result = subprocess.run(['gcloud', 'projects', 'describe', PROJECT_ID], capture_output=True, text=True)
+             project_number = result.stdout.splitlines()[-1].split(":")[1].strip().replace("'", "")
+             SERVICE_ACCOUNT = f"{project_number}-compute@developer.gserviceaccount.com"
+
 
     print("Service Account:", SERVICE_ACCOUNT)
 
@@ -79,10 +111,12 @@ if (
 # #### Set service account access for Vertex AI Pipelines
 # 
 
-
-get_ipython().system(' gsutil iam ch serviceAccount:{SERVICE_ACCOUNT}:roles/storage.objectCreator $BUCKET_URI')
-
-get_ipython().system(' gsutil iam ch serviceAccount:{SERVICE_ACCOUNT}:roles/storage.objectViewer $BUCKET_URI')
+if IS_IPYTHON:
+    get_ipython().system(' gsutil iam ch serviceAccount:{SERVICE_ACCOUNT}:roles/storage.objectCreator $BUCKET_URI')
+    get_ipython().system(' gsutil iam ch serviceAccount:{SERVICE_ACCOUNT}:roles/storage.objectViewer $BUCKET_URI')
+else:
+    subprocess.check_call(['gsutil', 'iam', 'ch', f'serviceAccount:{SERVICE_ACCOUNT}:roles/storage.objectCreator', BUCKET_URI])
+    subprocess.check_call(['gsutil', 'iam', 'ch', f'serviceAccount:{SERVICE_ACCOUNT}:roles/storage.objectViewer', BUCKET_URI])
 
 
 # ### Import libraries and define constants
@@ -108,9 +142,12 @@ aiplatform.init(project=PROJECT_ID, staging_bucket=BUCKET_URI)
 
 # In[14]:
 
-
-PATH = get_ipython().run_line_magic('env', 'PATH')
-get_ipython().run_line_magic('env', 'PATH={PATH}:/home/jupyter/.local/bin')
+if IS_IPYTHON:
+    PATH = get_ipython().run_line_magic('env', 'PATH')
+    get_ipython().run_line_magic('env', 'PATH={PATH}:/home/jupyter/.local/bin')
+else:
+    PATH = os.environ.get('PATH', '')
+    os.environ['PATH'] = f"{PATH}:/home/jupyter/.local/bin"
 
 
 DATASET_ID = "census"  # The Data Set ID where the view sits
@@ -130,7 +167,10 @@ print(f"PIPELINE_ROOT: {PIPELINE_ROOT}")
 
 
 # Create a BQ Dataset in the project.
-get_ipython().system('bq mk --location=$BQ_LOCATION --dataset $PROJECT_ID:$DATASET_ID')
+if IS_IPYTHON:
+    get_ipython().system('bq mk --location=$BQ_LOCATION --dataset $PROJECT_ID:$DATASET_ID')
+else:
+    subprocess.check_call(['bq', 'mk', '--location', BQ_LOCATION, '--dataset', f'{PROJECT_ID}:{DATASET_ID}'])
 
 
 # ## Define components for the pipeline
@@ -349,3 +389,88 @@ def xgboost_training(
     # Export the model to a file
     os.makedirs(model.path, exist_ok=True)
     joblib.dump(xgb_model_best, os.path.join(model.path, "model.joblib"))
+
+
+# ### Define deploying the model component
+# 
+# Finally, you define a component to deploy the XGBoost model.
+
+# In[19]:
+
+
+@component(
+    packages_to_install=["google-cloud-aiplatform==1.25.0"],
+)
+def deploy_xgboost_model(
+    model: Input[Model],
+    project_id: str,
+    vertex_endpoint: Output[Artifact],
+    vertex_model: Output[Model],
+):
+    """Deploys an XGBoost model to Vertex AI Endpoint.
+
+    Args:
+        model: The model to deploy.
+        project_id: The project ID of the Vertex AI Endpoint.
+
+    Returns:
+        vertex_endpoint: The deployed Vertex AI Endpoint.
+        vertex_model: The deployed Vertex AI Model.
+    """
+    from google.cloud import aiplatform
+
+    aiplatform.init(project=project_id)
+
+    deployed_model = aiplatform.Model.upload(
+        display_name="census-demo-model",
+        artifact_uri=model.uri,
+        serving_container_image_uri="us-docker.pkg.dev/vertex-ai/prediction/xgboost-cpu.1-6:latest",
+    )
+    endpoint = deployed_model.deploy(machine_type="n1-standard-4")
+
+    vertex_endpoint.uri = endpoint.resource_name
+    vertex_model.uri = deployed_model.resource_name
+
+
+# ## Construct the XGBoost training pipeline
+# 
+# Now you define the pipeline, with the following steps:
+# 
+# - Create a BigQuery view of the dataset.
+# - Export the dataset.
+# - Train the model.
+# - Deploy the model.
+
+# In[20]:
+
+
+@dsl.pipeline(
+    name="census-demo-pipeline",
+)
+def pipeline():
+    """A demo pipeline."""
+
+    create_input_view_task = create_census_view(
+        project_id=PROJECT_ID,
+        dataset_id=DATASET_ID,
+        view_name=VIEW_NAME,
+    )
+
+    export_dataset_task = (
+        export_dataset(
+            project_id=PROJECT_ID,
+            dataset_id=DATASET_ID,
+            view_name=VIEW_NAME,
+        )
+        .after(create_input_view_task)
+        .set_caching_options(False)
+    )
+
+    training_task = xgboost_training(
+        dataset=export_dataset_task.outputs["dataset"],
+    )
+
+    _ = deploy_xgboost_model(
+        project_id=PROJECT_ID,
+        model=training_task.outputs["model"],
+    )
