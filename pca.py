@@ -22,6 +22,8 @@ def perform_pca(
     and generates a scree plot.
 
     Args:
+         Input dataset.
+        metrics: Output metrics.
         n_components (int): The number of principal components to retain.
 
     Returns:
