@@ -241,8 +241,10 @@ def export_dataset(
 
 @component(
     packages_to_install=[
+        "pip==23.0",
         "xgboost==1.6.2",
         "pandas==1.3.5",
+        "numpy==1.23.0",
         "joblib==1.1.0",
         "scikit-learn==1.0.2",
     ],
@@ -273,7 +275,7 @@ def xgboost_training(
     from sklearn.preprocessing import LabelEncoder
 
     # Load the training census dataset
-    with open(dataset.path, "r") as train_data:
+    with open(dataset.path, "r") as train_
         raw_data = pd.read_csv(train_data)
 
     CATEGORICAL_COLUMNS = (
